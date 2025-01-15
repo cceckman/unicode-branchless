@@ -25,7 +25,17 @@ pub fn branchless_utf8(codepoint: u32) -> ([u8; 4], usize) {
 }
 
 const fn utf8_bytes_for_codepoint(codepoint: u32) -> usize {
-    let len = LEN[codepoint.leading_zeros() as usize] as usize;
+    let mut len = 1;
+    // In Rust, true casts to 1 and false to 0, so we can "just" sum lengths.
+    if codepoint > 0x7f {
+        len += 1;
+    };
+    if codepoint > 0x7ff {
+        len += 1;
+    }
+    if codepoint > 0xffff {
+        len += 1;
+    }
 
     // Handle surrogates via bit-twiddling.
     // Rust guarantees true == 1 and false == 0:
@@ -43,20 +53,6 @@ const fn utf8_bytes_for_codepoint(codepoint: u32) -> usize {
 }
 
 type Table = [[u8; 4]; 5];
-
-/// Length, based on the number of leading zeros.
-const LEN: [u8; 33] = [
-    // 0-10 leading zeros: not valid
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, //
-    // 11-15 leading zeros: 4 bytes
-    4, 4, 4, 4, 4, //
-    //16-20 leading zeros: 3 bytes
-    3, 3, 3, 3, 3, //
-    // 21-24 leading zeros: 2 bytes
-    2, 2, 2, 2, //
-    // 25-32 leading zeros: 1 byte
-    1, 1, 1, 1, 1, 1, 1, 1,
-];
 
 // Byte prefix for a continuation byte.
 const CONTINUE: u8 = 0b1000_0000;
