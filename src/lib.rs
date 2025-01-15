@@ -10,6 +10,8 @@
 ///
 /// To add this codepoint to a string, append all four bytes in order,
 /// and record that (usize) bytes were added to the string.
+///
+/// Returns a length of zero for invalid codepoints (surrogates and out-of-bounds values).
 pub fn branchless_utf8(codepoint: u32) -> ([u8; 4], usize) {
     let len = utf8_bytes_for_codepoint(codepoint);
     let buf = [
@@ -23,7 +25,21 @@ pub fn branchless_utf8(codepoint: u32) -> ([u8; 4], usize) {
 }
 
 const fn utf8_bytes_for_codepoint(codepoint: u32) -> usize {
-    LEN[codepoint.leading_zeros() as usize] as usize
+    let len = LEN[codepoint.leading_zeros() as usize] as usize;
+
+    // Handle surrogates via bit-twiddling.
+    // Rust guarantees true == 1 and false == 0:
+    let surrogate_bit = ((codepoint >= 0xD800) && (codepoint <= 0xDFFF)) as usize;
+    // Extend that one bit into three, and use its inverse as a mask for length
+    let surrogate_mask = surrogate_bit << 2 | surrogate_bit << 1 | surrogate_bit;
+
+    // Handle exceeded values via bit-twiddling.
+    // Unfortunately, these don't align precisely with a leading-zero boundary;
+    // the largest codepoint is U+10FFFF.
+    let exceeded_bit = (codepoint > 0x10_FFFF) as usize;
+    let exceeded_mask = exceeded_bit << 2 | exceeded_bit << 1 | exceeded_bit;
+
+    len & !surrogate_mask & !exceeded_mask
 }
 
 type Table = [[u8; 4]; 5];
@@ -75,84 +91,24 @@ mod tests {
 
     #[test]
     fn length() {
-        for i in 0..0x10FFFF {
-            let c = match char::from_u32(i) {
-                None => continue,
-                Some(c) => c,
-            };
-            let want = c.to_string().as_bytes().len();
+        for i in 0..0xFF_FFFF {
             let got = utf8_bytes_for_codepoint(i);
+            let want = char::from_u32(i)
+                .map(|c| c.to_string().as_bytes().len())
+                .unwrap_or(0);
             assert_eq!(want, got, "{i:x}: {want} != {got}")
         }
     }
 
     #[test]
-    fn branchless_one_byte() {
-        for i in 0..=0x7f {
+    fn branchless_same() {
+        for i in 0..0xFF_FFFF {
             let (bytes, len) = branchless_utf8(i);
-            assert_eq!(len, 1);
-            let slice = &bytes[0..len];
-            let s = std::str::from_utf8(slice).unwrap_or_else(|_| panic!("{i}"));
-            assert_eq!(s.len(), 1, "{i}");
-            assert_eq!(s.chars().next().unwrap() as u32, i);
-        }
-    }
-
-    #[test]
-    fn branchless_two_bytes() {
-        for i in 0x80..=0x07ff {
-            let (bytes, len) = branchless_utf8(i);
-            let slice = &bytes[0..len];
-            let s = std::str::from_utf8(slice).unwrap_or_else(|_| panic!("{i}"));
-            assert_eq!(s.chars().next().unwrap() as u32, i);
-        }
-    }
-    #[test]
-    fn branchless_three_bytes() {
-        for i in 0x800..=0xffff {
-            // TODO: Test surrogate codepoints
-            let c = match char::from_u32(i) {
-                None => continue,
-                Some(c) => c,
-            };
-
-            let (bytes, len) = branchless_utf8(i);
-            let got = &bytes[0..len];
-
-            let want = c.to_string().as_bytes().to_owned();
-            assert_eq!(&want, got, "{i:x}");
-        }
-    }
-    #[test]
-    fn branchless_four_bytes() {
-        for i in 0x01_0000..=0x10_ffff {
-            let c = match char::from_u32(i) {
-                None => continue,
-                Some(c) => c,
-            };
-
-            let (bytes, len) = branchless_utf8(i);
-            let got = &bytes[0..len];
-
-            let want = c.to_string().as_bytes().to_owned();
-            assert_eq!(&want, got, "{i:x}");
-        }
-    }
-    #[test]
-    fn branchless_overfull() {
-        // We don't go through the _full_ range, for brevity;
-        // just go a few more 1s ahead.
-        for i in 0x10_ffff..=0x00ff_ffff {
-            let c = match char::from_u32(i) {
-                None => continue,
-                Some(c) => c,
-            };
-
-            let (bytes, len) = branchless_utf8(i);
-            let got = &bytes[0..len];
-
-            let want = c.to_string().as_bytes().to_owned();
-            assert_eq!(&want, got, "{i:x}");
+            let got = &bytes[..len];
+            let want = char::from_u32(i)
+                .map(|c| c.to_string().as_bytes().to_owned())
+                .unwrap_or(Vec::new());
+            assert_eq!(&want, got);
         }
     }
 }
