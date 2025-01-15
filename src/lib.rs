@@ -13,7 +13,7 @@
 pub fn branchless_utf8(codepoint: u32) -> ([u8; 4], usize) {
     let len = utf8_bytes_for_codepoint(codepoint);
     let buf = [
-        PREFIX[len][0] | (codepoint >> SHIFT[len][0] & MASK[len][0] as u32) as u8,
+        PREFIX[len][0] | ((codepoint >> SHIFT[len][0]) & MASK[len][0] as u32) as u8,
         PREFIX[len][1] | ((codepoint >> SHIFT[len][1]) & MASK[len][1] as u32) as u8,
         PREFIX[len][2] | ((codepoint >> SHIFT[len][2]) & MASK[len][2] as u32) as u8,
         PREFIX[len][3] | ((codepoint >> SHIFT[len][3]) & MASK[len][3] as u32) as u8,
@@ -30,9 +30,9 @@ type Table = [[u8; 4]; 5];
 
 /// Length, based on the number of leading zeros.
 const LEN: [u8; 33] = [
-    //0-11 leading zeros: not valid
+    // 0-10 leading zeros: not valid
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, //
-    // 8-15 leading zeros: 4 bytes
+    // 11-15 leading zeros: 4 bytes
     4, 4, 4, 4, 4, //
     //16-20 leading zeros: 3 bytes
     3, 3, 3, 3, 3, //
@@ -126,6 +126,23 @@ mod tests {
     #[test]
     fn branchless_four_bytes() {
         for i in 0x01_0000..=0x10_ffff {
+            let c = match char::from_u32(i) {
+                None => continue,
+                Some(c) => c,
+            };
+
+            let (bytes, len) = branchless_utf8(i);
+            let got = &bytes[0..len];
+
+            let want = c.to_string().as_bytes().to_owned();
+            assert_eq!(&want, got, "{i:x}");
+        }
+    }
+    #[test]
+    fn branchless_overfull() {
+        // We don't go through the _full_ range, for brevity;
+        // just go a few more 1s ahead.
+        for i in 0x10_ffff..=0x00ff_ffff {
             let c = match char::from_u32(i) {
                 None => continue,
                 Some(c) => c,
