@@ -27,15 +27,9 @@ pub fn branchless_utf8(codepoint: u32) -> ([u8; 4], usize) {
 const fn utf8_bytes_for_codepoint(codepoint: u32) -> usize {
     let mut len = 1;
     // In Rust, true casts to 1 and false to 0, so we can "just" sum lengths.
-    if codepoint > 0x7f {
-        len += 1;
-    };
-    if codepoint > 0x7ff {
-        len += 1;
-    }
-    if codepoint > 0xffff {
-        len += 1;
-    }
+    len += (codepoint > 0x7f) as usize;
+    len += (codepoint > 0x7ff) as usize;
+    len += (codepoint > 0xffff) as usize;
 
     // Handle surrogates via bit-twiddling.
     // Rust guarantees true == 1 and false == 0:
