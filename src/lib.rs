@@ -3,7 +3,7 @@
 //! Thanks to Nathan for the question and Lorenz for the key insight.
 //! Any remaining mistakes are mine.
 //!
-//! See https://github.com/skeeto/branchless-utf8 for encoding.
+//! See https://github.com/skeeto/branchless-utf8 for decoding.
 
 /// Encode a UTF-8 codepoint.
 /// Returns a buffer and the number of valid bytes in the buffer.
