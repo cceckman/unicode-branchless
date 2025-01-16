@@ -6,13 +6,12 @@
 //! See https://github.com/skeeto/branchless-utf8 for decoding.
 
 /// Encode a UTF-8 codepoint.
-/// Returns a buffer and the number of valid bytes in the buffer.
+/// Returns a buffer and the number of valid bytes in the buffer;
+/// append the valid bytes to your string to keep going.
 ///
-/// To add this codepoint to a string, append all four bytes in order,
-/// and record that (usize) bytes were added to the string.
-///
-/// Returns a length of zero for invalid codepoints (surrogates and out-of-bounds values).
-pub fn branchless_utf8(codepoint: u32) -> ([u8; 4], usize) {
+/// Returns a length of zero for invalid codepoints (surrogates and out-of-bounds values);
+/// it's up to the caller to turn that into U+FFFD, or return an error.
+pub const fn branchless_utf8(codepoint: u32) -> ([u8; 4], usize) {
     let len = utf8_bytes_for_codepoint(codepoint);
     let buf = [
         PREFIX[len][0] | ((codepoint >> SHIFT[len][0]) & MASK[len][0] as u32) as u8,
@@ -24,7 +23,11 @@ pub fn branchless_utf8(codepoint: u32) -> ([u8; 4], usize) {
     (buf, len)
 }
 
-const fn utf8_bytes_for_codepoint(codepoint: u32) -> usize {
+/// Return the number of bytes required to encode the provided codepoint.
+///
+/// Returns zero for invalid codepoints (surrogates and out-of-bounds values);
+/// it's up to the caller to replace that with U+FFFD (if you want to).
+pub const fn utf8_bytes_for_codepoint(codepoint: u32) -> usize {
     let mut len = 1;
     // In Rust, true casts to 1 and false to 0, so we can "just" sum lengths.
     len += (codepoint > 0x7f) as usize;
