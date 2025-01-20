@@ -6,8 +6,6 @@
 //! See https://github.com/skeeto/branchless-utf8 for decoding.
 
 /// Encode a UTF-8 codepoint.
-/// Returns a buffer and the number of valid bytes in the buffer;
-/// append the valid bytes to your string to keep going.
 ///
 /// Returns a length of zero for invalid codepoints (surrogates and out-of-bounds values);
 /// it's up to the caller to turn that into U+FFFD, or return an error.
