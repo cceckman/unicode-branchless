@@ -5,12 +5,12 @@
 //!
 //! See https://github.com/skeeto/branchless-utf8 for decoding.
 
-/// Encode a UTF-8 codepoint.
+/// Encode a Unicode codepoint into UTF-8.
 ///
-/// Returns a length of zero for invalid codepoints (surrogates and out-of-bounds values);
-/// it's up to the caller to turn that into U+FFFD, or return an error.
-pub const fn branchless_utf8(codepoint: u32) -> ([u8; 4], usize) {
+/// Returns an array of bytes and a count of how many are valid (1-4).
+pub const fn branchless_utf8(codepoint: char) -> ([u8; 4], usize) {
     let len = utf8_bytes_for_codepoint(codepoint);
+    let codepoint = codepoint as u32;
     let buf = [
         PREFIX[len][0] | ((codepoint >> SHIFT[len][0]) & MASK[len][0] as u32) as u8,
         PREFIX[len][1] | ((codepoint >> SHIFT[len][1]) & MASK[len][1] as u32) as u8,
@@ -22,29 +22,18 @@ pub const fn branchless_utf8(codepoint: u32) -> ([u8; 4], usize) {
 }
 
 /// Return the number of bytes required to encode the provided codepoint.
-///
-/// Returns zero for invalid codepoints (surrogates and out-of-bounds values);
-/// it's up to the caller to replace that with U+FFFD (if you want to).
-pub const fn utf8_bytes_for_codepoint(codepoint: u32) -> usize {
+pub const fn utf8_bytes_for_codepoint(codepoint: char) -> usize {
+    // The `char` type provides a proof that the value is in-bounds and not a surrogate.
+    // We can "lower" here while relying on the proof from the type signature.
+    let codepoint = codepoint as u32;
+
     let mut len = 1;
     // In Rust, true casts to 1 and false to 0, so we can "just" sum lengths.
     len += (codepoint > 0x7f) as usize;
     len += (codepoint > 0x7ff) as usize;
     len += (codepoint > 0xffff) as usize;
 
-    // Handle surrogates via bit-twiddling.
-    // Rust guarantees true == 1 and false == 0:
-    let surrogate_bit = ((codepoint >= 0xD800) && (codepoint <= 0xDFFF)) as usize;
-    // Extend that one bit into three, and use its inverse as a mask for length
-    let surrogate_mask = surrogate_bit << 2 | surrogate_bit << 1 | surrogate_bit;
-
-    // Handle exceeded values via bit-twiddling.
-    // Unfortunately, these don't align precisely with a leading-zero boundary;
-    // the largest codepoint is U+10FFFF.
-    let exceeded_bit = (codepoint > 0x10_FFFF) as usize;
-    let exceeded_mask = exceeded_bit << 2 | exceeded_bit << 1 | exceeded_bit;
-
-    len & !surrogate_mask & !exceeded_mask
+    len
 }
 
 type Table = [[u8; 4]; 5];
@@ -83,10 +72,12 @@ mod tests {
     #[test]
     fn length() {
         for i in 0..0xFF_FFFF {
-            let got = utf8_bytes_for_codepoint(i);
-            let want = char::from_u32(i)
-                .map(|c| c.to_string().as_bytes().len())
-                .unwrap_or(0);
+            let c = match char::from_u32(i) {
+                Some(c) => c,
+                None => continue,
+            };
+            let got = utf8_bytes_for_codepoint(c);
+            let want = c.to_string().as_bytes().len();
             assert_eq!(want, got, "{i:x}: {want} != {got}")
         }
     }
@@ -94,12 +85,14 @@ mod tests {
     #[test]
     fn branchless_same() {
         for i in 0..0xFF_FFFF {
-            let (bytes, len) = branchless_utf8(i);
+            let c = match char::from_u32(i) {
+                Some(c) => c,
+                None => continue,
+            };
+            let (bytes, len) = branchless_utf8(c);
             let got = &bytes[..len];
-            let want = char::from_u32(i)
-                .map(|c| c.to_string().as_bytes().to_owned())
-                .unwrap_or(Vec::new());
-            assert_eq!(&want, got);
+            let want = c.to_string().as_bytes().to_owned();
+            assert_eq!(want, got, "{i:x}: {want:?} != {got:?}");
         }
     }
 }
