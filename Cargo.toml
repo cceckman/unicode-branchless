@@ -3,11 +3,18 @@ name = "unicode-branchless"
 version = "0.1.0"
 edition = "2021"
 
+[dev-dependencies]
+criterion = "0.5.1"
+
 [profile.release]
 opt-level = 3
 codegen-units = 1
-lto = "full"
+lto = "fat"
 
 [features]
 looped = []
 tabled = []
+
+[[bench]]
+name = "benchmark"
+harness = false
